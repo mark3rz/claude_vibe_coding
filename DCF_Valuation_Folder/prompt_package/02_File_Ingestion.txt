@@ -1,0 +1,12 @@
+TASK 2 — Excel Ingestion (No Calculations)
+
+Add file upload handling using SheetJS.
+
+Requirements: - Detect sheets using keyword matching. - Extract A1
+(company), A2 (units), row 4 headers (years). - Store into
+state.rawData. - Hide upload screen after successful load. - Push
+warnings instead of throwing errors.
+
+Do NOT: - Compute metrics - Parse numbers - Modify layout
+
+DEFINITION OF DONE: - Console logs detected sheets and years.

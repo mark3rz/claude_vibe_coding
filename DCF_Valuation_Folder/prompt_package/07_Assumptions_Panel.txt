@@ -1,0 +1,8 @@
+TASK 7 — Assumptions Panel
+
+Add editable inputs: - Forecast years - Revenue growth - Margins - WACC
+components - Terminal settings - Current price
+
+Add Recalculate button → triggers calculateDCF.
+
+DEFINITION OF DONE: - Changing inputs updates valuation.

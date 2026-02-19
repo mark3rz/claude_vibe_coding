@@ -1,0 +1,11 @@
+TASK 4 — Derived Historical Metrics
+
+Add derived calculations: - YoY growth - Margins (gross, EBITDA, EBIT,
+net) - FCF and FCF margin - Net debt - Net debt / EBITDA - ROE, ROA,
+ROIC
+
+Store in: state.historical.derived
+
+Use safeDivide() helper to prevent NaN.
+
+DEFINITION OF DONE: - Derived arrays align with historical years.

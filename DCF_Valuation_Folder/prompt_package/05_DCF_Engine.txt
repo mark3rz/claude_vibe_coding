@@ -1,0 +1,11 @@
+TASK 5 — DCF Engine Core Logic
+
+Implement: - calculateDCF(inputs, historicalData) - IRR solver
+(bisection) - Default assumptions from 3-year averages - Validation:
+WACC > terminal growth
+
+Store results in state.dcf.
+
+Do NOT: - Add charts - Add sensitivity tables
+
+DEFINITION OF DONE: - calculateDCF returns stable numeric outputs.
