@@ -1,0 +1,24 @@
+Implement:
+1) Sensitivity table: WACC vs Terminal Growth
+- Use current scenario as base.
+- WACC range: base +/- 200 bps in 50 bps steps (configurable)
+- g range: base +/- 100 bps in 25 bps steps (configurable)
+- Cell values: Price per Share (default). Also allow toggle to show Equity Value.
+- Render as a table; conditional formatting optional.
+
+2) Tornado chart defaults (8 variables) with +/- shocks:
+- WACC: +/- 100 bps
+- Terminal growth g: +/- 50 bps
+- Revenue growth (average or year-1 if simpler): +/- 200 bps
+- EBITDA margin: +/- 200 bps
+- Tax rate: +/- 100 bps
+- D&A % revenue: +/- 50 bps
+- Capex % revenue: +/- 100 bps
+- NWC % revenue: +/- 50 bps
+
+For each variable:
+- Apply shock to all forecast years unless the variable is inherently single (eg WACC, g).
+- Recompute Price per Share impact vs base.
+- Plot horizontal bars (plotly) sorted by absolute impact.
+
+Must be dynamic with current scenario inputs.

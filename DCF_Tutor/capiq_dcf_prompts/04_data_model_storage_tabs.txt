@@ -1,0 +1,29 @@
+Define models for:
+- RawWorkbook: list of RawSheet(name, dataframe, detected_years, year_metadata)
+- RawSheet: name: str, raw_df: DataFrame, statement_df: optional normalized df
+- StandardizedFinancials:
+  - income_statement: DataFrame
+  - balance_sheet: DataFrame
+  - cash_flow: DataFrame
+  - multiples: DataFrame
+  - metadata: dict (units, currency, company_name optional)
+- MappingEntry: section, canonical_field, raw_label, confidence
+- MappingReport: list[MappingEntry]
+
+Use dataclasses or pydantic, whichever is simplest.
+
+In Streamlit session_state store:
+- raw_workbook
+- standardized_financials
+- mapping_report
+- user_mapping_overrides
+- include_estimates_toggle
+- exit_multiple_suggestion
+
+Implement helper functions:
+- get_year_columns(df) -> (header_row_index, year_col_indices, year_labels, year_metadata)
+- clean_number(x) -> float or NaN (commas, parentheses negatives, blanks)
+- normalize_label(label) -> normalized string for fuzzy matching (lower, strip, remove punctuation, collapse whitespace)
+- fuzzy_match(query, candidates) -> (best_candidate, confidence) using RapidFuzz if available (else difflib)
+
+Include a confidence threshold constant and allow it to be adjusted via UI slider.

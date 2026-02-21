@@ -1,0 +1,14 @@
+Add tests:
+- test_clean_number: commas, parentheses negatives, blanks
+- test_year_parsing: "2020 FY", "FY 2021", "2022E", "2023 Est", "12/31/2024"
+- test_estimate_detection: headers with E/Est/Estimate flags
+- test_dcf_math: small fixture with known PV checks
+- test_terminal_value: both perpetuity and exit multiple
+- test_ev_to_equity_bridge: check arithmetic and defaults
+
+Add a simple synthetic fixture workbook generator:
+- Create DataFrames shaped like Capital IQ statements with metric rows and year columns.
+- Include a mix of actual and estimate headers.
+- Write to xlsx in tests/tmp and ensure importer reads it.
+
+Goal: enough tests to avoid demo-breaking regressions.

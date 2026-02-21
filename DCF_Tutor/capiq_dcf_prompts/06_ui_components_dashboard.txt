@@ -1,0 +1,27 @@
+Generate Streamlit pages:
+- Import
+- Raw Data
+- Mapping
+- Standardized Financials
+- DCF Valuation
+
+UI requirements:
+- Raw Data page: one tab per original sheet name, show raw table.
+- Standardized Financials: tabs for IS, BS, CF, Multiples. Show DataFrames with numeric formatting.
+- DCF page layout:
+  - Sidebar: scenario selector + forecast horizon + include-estimates toggle (advanced) + valuation method (perpetuity vs exit multiple)
+  - Main:
+    - Top: output summary cards (EV, Equity, Price)
+    - Middle: EV->Equity waterfall + explicit vs terminal chart
+    - Bottom: key charts + sensitivity + tornado + PV table
+- Assumptions inputs:
+  - Full set of inputs visible with Basic and Advanced sections
+  - Advanced section must be populated with defaults (not blank)
+  - Year-by-year editor: allow editing per year; default to same across years
+  - Buttons: "Set all years to first-year value", "Copy Base to Upside/Downside"
+- “Explain this” side panel:
+  - A persistent panel (right side or expandable) that updates when the user selects an input name from a dropdown (v1).
+  - Shows: definition, formula, typical impact direction.
+- Show formulas using Streamlit markdown (LaTeX) near each section.
+
+Keep it clean and mentor-demo ready.

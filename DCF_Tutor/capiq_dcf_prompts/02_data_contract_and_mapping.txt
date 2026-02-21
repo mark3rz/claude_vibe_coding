@@ -1,0 +1,93 @@
+Design the data model and mapping strategy for importing Capital IQ Excel exports.
+
+Input:
+- User uploads a single .xlsx file exported from Capital IQ with multiple sheets.
+- Statement sheets have a metric/line-item column on the left and years as columns across the top.
+- Columns are often labeled like "2020 FY" (extract 4-digit year).
+
+Requirements:
+1) Raw tabs:
+- For each sheet, store and render the raw table exactly as imported.
+- Render raw sheet tables in Streamlit in a “Raw” section with one tab per sheet.
+
+2) Standardized tabs:
+- Build canonical DataFrames for Income Statement, Balance Sheet, Cash Flow, Multiples.
+- Index = canonical line item names.
+- Columns = integer years (ascending).
+- Values = float where possible.
+
+3) Estimates handling:
+- Preserve estimates if included in the export.
+- Detect estimate columns using heuristics:
+  - header contains 'E', 'Est', 'Estimate', 'FY' + 'E', or similar
+  - if cannot detect, treat all as actual.
+- For MVP:
+  - Standardized "historical" base uses ACTUALS ONLY by default.
+  - Provide optional toggle "Include estimates as history (advanced)" that appends estimate years after the last actual.
+- Always keep estimate columns visible in Raw tabs.
+
+4) Units:
+- Assume all financial statement values are in USD millions.
+- Show a global label "USD (mm)" in the UI.
+- Do not auto-scale numbers.
+
+5) Mapping approach:
+- Identify which sheets correspond to each canonical section using fuzzy matching on sheet names.
+- Within a sheet, map raw row labels to canonical line items using fuzzy matching with confidence score.
+- Show a “Mapping Review” table:
+  - canonical_field, best_raw_match, confidence, allow user override via dropdown
+- Default to best match if confidence >= threshold (eg 0.80). Otherwise require user confirmation.
+
+Canonical fields for v1 (minimum set):
+
+Income Statement:
+- Revenue
+- COGS
+- Gross Profit
+- SG&A
+- R&D (optional)
+- EBITDA
+- D&A
+- EBIT
+- Pretax Income
+- Taxes
+- Net Income
+
+Balance Sheet:
+- Cash (optional)
+- Current Assets (optional)
+- Current Liabilities (optional)
+- PP&E
+- Total Assets
+- Total Debt (short + long if available)
+- Net Debt (if available)
+- Total Liabilities
+- Shareholders' Equity
+
+Cash Flow:
+- CFO
+- Capex
+- Free Cash Flow (if available)
+- Change in Net Working Capital (if available)
+- D&A (if available)
+
+Multiples:
+- EV/Revenue
+- EV/EBITDA
+- P/E
+- Price/Book
+- Market Cap
+- Enterprise Value
+- Net Debt
+
+Heuristics for table detection within a sheet:
+- Detect the header row that contains year-like tokens (regex for 4-digit years).
+- Assume first non-empty column is row labels.
+- Convert numeric-like strings to floats (handle commas, parentheses for negatives).
+
+Output:
+- Provide python module interfaces:
+  - parse_workbook(file) -> RawWorkbook
+  - build_standardized(raw_workbook, include_estimates: bool) -> StandardizedFinancials + mapping_report + exit_multiple_suggestion
+- mapping_report includes confidence scores and raw matches.
+- exit_multiple_suggestion: use EV/EBITDA from the Multiples tab if present.

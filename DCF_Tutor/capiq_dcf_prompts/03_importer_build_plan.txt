@@ -1,0 +1,51 @@
+Write an implementation plan and then generate code for a Streamlit MVP importer.
+
+Repo structure:
+- app.py (Streamlit entry)
+- src/
+  - importer.py
+  - mapping.py
+  - models.py
+  - dcf.py
+  - charts.py
+  - explain.py
+  - utils.py
+- tests/
+  - test_dcf.py
+  - test_parsing.py
+
+Importer steps:
+1) Load xlsx into openpyxl.
+2) For each sheet:
+   - Read into a pandas DataFrame using openpyxl values.
+   - Trim empty rows and columns.
+   - Store as raw_table (DataFrame of strings and numbers).
+3) Identify year header row and year columns:
+   - Extract year using regex r'(19|20)\d{2}' from header cell string (eg "2020 FY" -> 2020).
+   - If multiple year matches, take the first.
+   - If no year in a column header, it is not a year column.
+4) Estimate detection:
+   - Mark a year column as estimate if the header contains tokens like 'E', 'Est', 'Estimate' near the year.
+   - Maintain year_metadata dict: year -> {"is_estimate": bool, "raw_header": str}
+5) Build a normalized “statement table” view with:
+   - row_label column
+   - year columns as numeric series
+6) Feed into mapping layer to build canonical DataFrames for the four sections.
+
+Streamlit UI:
+- Sidebar navigation: Import, Raw Data, Mapping, Standardized Financials, DCF
+- Import page:
+  - file uploader
+  - after upload: show list of sheets detected
+- Raw Data page:
+  - one tab per sheet name; render raw_table
+- Mapping page:
+  - mapping review per section with confidence + overrides
+  - slider to set confidence threshold
+  - button to rebuild standardized statements
+- Standardized Financials page:
+  - tabs for IS/BS/CF/Multiples (canonical)
+  - show years and numeric formatting
+- DCF page will be implemented later, but create the scaffold and session_state wiring.
+
+Generate robust code, include type hints, defensive parsing, and sensible defaults. Prioritize a working demo.

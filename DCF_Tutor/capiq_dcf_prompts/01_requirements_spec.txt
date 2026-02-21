@@ -1,0 +1,62 @@
+You are a senior fintech full-stack engineer. Build a local MVP in 1 weekend.
+
+Goal:
+- Local learning tool that imports an S&P Capital IQ Excel export (.xlsx) for ONE company.
+- Display the imported Capital IQ sections as separate tabs, preserving the exact data values.
+- Also create lightly standardized data structures for Income Statement, Balance Sheet, Cash Flow, and Multiples.
+- Build a DCF engine (unlevered FCFF) with scenarios (Base, Upside, Downside).
+- DCF produces Enterprise Value, Equity Value, Implied Price per Share.
+- Must include:
+  - EV to Equity waterfall bridge chart
+  - Sensitivity table: WACC vs Terminal Growth
+  - Tornado chart with default drivers
+  - Key charts (all must be dynamic): Revenue, EBITDA, FCFF, Margin trend, Reinvestment vs growth, PV of cash flows by year, Explicit period vs Terminal contribution
+
+Constraints:
+- Input: Capital IQ Excel export with multiple tabs (Income Statement, Balance Sheet, Cash Flow, Multiples, possibly others).
+- Run locally.
+- In-memory only, no database.
+- Light standardization: keep raw tabs exactly as imported, plus canonical mapping for the 4 sections.
+- Fuzzy matching with confidence score for mapping rows to canonical fields.
+- No audit lineage needed.
+- DCF: unlevered FCFF, terminal value supports perpetuity growth and exit multiple (exit multiple can be present but can be hidden if not used in v1).
+- Forecast horizon: user selectable (default 5 years, allow 10).
+- Forecasting: both driver-based and line-item. For MVP implement driver-based with optional line-item override fields, but must not leave advanced section blank. If advanced is not fully implemented, populate advanced fields with defaults and show them.
+- Inputs: year-by-year editable, default to same value across years.
+- WACC: both input directly and computed. Include an explanatory section at bottom showing calculation with exhibits and formulas.
+- Keep Net Working Capital simple in v1.
+- Shares: basic diluted shares only.
+- Outputs required: EV, Equity Value, Price per Share, PV table, charts, sensitivity, tornado, waterfall.
+- UX: “Explain this” side panel that updates based on selected input, show formulas, no “why did EV change” narrative in v1.
+
+Data specifics:
+- Tables have a metric/line-item column on the left and years as columns across the top.
+- Year headers often look like "2020 FY" (extract the first 4-digit year).
+- Units: assume USD millions; do NOT auto-scale.
+
+Estimates handling:
+- The export may include estimates. Preserve them in Raw tabs.
+- Standardized “historical base” uses actuals only by default.
+- Provide an advanced toggle to include estimates as history.
+
+Forecast start:
+- Forecast starts from the LAST ACTUAL year (default). If the user toggles “include estimates as history”, forecast starts from the last included year.
+
+Tech recommendation for MVP:
+- Python Streamlit app
+- pandas + openpyxl for Excel parsing
+- plotly for charts
+- typing (and optionally pydantic/dataclasses)
+
+Deliverables:
+- A runnable Streamlit app with clear folder structure
+- Basic unit tests for DCF math and parsing functions
+- A demo workflow:
+  1) Upload xlsx
+  2) Review mapping confidence
+  3) Browse raw tabs and standardized tabs
+  4) Go to DCF and adjust assumptions and scenarios
+  5) View EV and Equity outputs, charts, sensitivity, tornado, waterfall
+  6) Scroll to WACC explanation section with formulas and exhibits
+
+Ask no further questions unless absolutely required. Where ambiguity exists, implement robust heuristics and sensible defaults and document them.
