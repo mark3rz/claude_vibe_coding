@@ -328,29 +328,23 @@ function renderCharts() {
   }
 
   container.innerHTML = `
-    <div class="card-elevated" style="margin-bottom:0;">
-      <h2 class="h2" style="margin-bottom:var(--space-5);">Charts</h2>
-      <div class="charts-grid">
-
-        ${hasDCF ? `
-        <div class="chart-card">
-          <div class="chart-wrapper">
-            <canvas id="canvas-ev-waterfall"></canvas>
-          </div>
-        </div>` : ''}
-
-        <div class="chart-card">
-          <div class="chart-wrapper">
-            <canvas id="canvas-revenue-ebitda"></canvas>
-          </div>
+    <p class="caption" style="margin-bottom:6px;">Charts</p>
+    <div class="charts-grid">
+      ${hasDCF ? `
+      <div class="chart-card">
+        <div class="chart-wrapper">
+          <canvas id="canvas-ev-waterfall"></canvas>
         </div>
-
-        <div class="chart-card">
-          <div class="chart-wrapper">
-            <canvas id="canvas-fcf"></canvas>
-          </div>
+      </div>` : ''}
+      <div class="chart-card">
+        <div class="chart-wrapper">
+          <canvas id="canvas-revenue-ebitda"></canvas>
         </div>
-
+      </div>
+      <div class="chart-card">
+        <div class="chart-wrapper">
+          <canvas id="canvas-fcf"></canvas>
+        </div>
       </div>
     </div>
   `;

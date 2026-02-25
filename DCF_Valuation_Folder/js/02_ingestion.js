@@ -1,20 +1,30 @@
 /* ============================================================
-   TASK 02 — Excel Ingestion (Updated for Capital IQ / FactSet format)
-   Handles two file layouts:
-     A) Simple format — company in A1, units in A2, years in row 4
-     B) Capital IQ/FactSet format — metadata rows 1-14, year headers
+   TASK 02 -- Excel Ingestion (Capital IQ Adapter)
+   Handles three file layouts:
+     A) Simple format -- company in A1, units in A2, years in row 4
+     B) Capital IQ/FactSet format -- metadata rows 1-14, year headers
         in row 15 as "12 months\nNov-29-2019" multiline strings,
         data from row 17 onward.
-   Detects format automatically. Stores into state.rawData.
+     C) Capital IQ "2020 FY" style -- year headers like "2020 FY",
+        "2021E", "FY2022" with estimate markers.
+   Schema derived from DCF_Tutor/capiq_dcf_prompts specs 03-05.
+   Adapter: detects format via header pattern, normalizes to
+   canonical { years, yearMetadata, sheets } structure expected
+   by 03_normalization.js and downstream pipeline.
+   Backward compatible with old Capital IQ format.
    NO number parsing. NO calculations. NO layout changes.
 ============================================================ */
 
 // --- Sheet keyword groups for detection ---
+// Capital IQ sheets: "Income Statement", "Balance Sheet", "Cash Flow",
+// "Key Stats", "Capitalization", "Multiples"
 const SHEET_KEYWORDS = {
-  income:   ['income', 'p&l', 'profit', 'loss', 'pnl', 'revenue', 'is'],
-  balance:  ['balance', 'bs', 'assets', 'liabilities', 'equity'],
-  cashflow: ['cash flow', 'cashflow', 'cf', 'cash'],
-  summary:  ['summary', 'overview', 'model', 'dcf', 'valuation', 'key stats'],
+  income:     ['income', 'p&l', 'profit', 'loss', 'pnl', 'revenue', 'is'],
+  balance:    ['balance', 'bs', 'assets', 'liabilities', 'equity'],
+  cashflow:   ['cash flow', 'cashflow', 'cf', 'cash'],
+  multiples:  ['multiples', 'multiple', 'ev/ebitda', 'trading comps'],
+  summary:    ['summary', 'overview', 'model', 'dcf', 'valuation', 'key stats',
+               'capitalization', 'cap table'],
 };
 
 // --- Detect sheet type from name ---
@@ -26,8 +36,23 @@ function detectSheetType(name) {
   return 'unknown';
 }
 
+// --- Detect if a year header represents an estimate/forecast ---
+// Capital IQ uses tokens like "E", "Est", "Estimate" near the year.
+// Returns true for "2021E", "2021 Est", "FY2021E", "Estimate" in multiline.
+function isEstimateHeader(cellValue) {
+  if (cellValue === null || cellValue === undefined) return false;
+  const s = String(cellValue).trim();
+  // Look for E/Est/Estimate tokens near the year
+  if (/\d{4}\s*E\b/i.test(s)) return true;
+  if (/\bE\s*\d{4}/i.test(s)) return true;
+  if (/\best(?:imate)?\b/i.test(s)) return true;
+  if (/\bforecast\b/i.test(s)) return true;
+  if (/\bprojected?\b/i.test(s)) return true;
+  return false;
+}
+
 // --- Extract a 4-digit year from various string formats ---
-// Handles: "2021", "FY2021", "2021A", "2021E",
+// Handles: "2021", "FY2021", "2021A", "2021E", "2020 FY",
 //          "12 months\nNov-29-2019", "Restated\n12 months\nNov-30-2018",
 //          Excel date serial numbers
 function extractYear(cellValue, dateMode) {
@@ -65,31 +90,40 @@ function extractYear(cellValue, dateMode) {
 }
 
 // --- Scan a worksheet to find the year-header row ---
-// Looks for the first row where ≥3 consecutive columns contain 4-digit years.
-// Returns { headerRow (0-based), dataStartRow (0-based), yearCols [] }
+// Looks for the first row where >=3 consecutive columns contain 4-digit years.
+// Returns { headerRow (0-based), dataStartRow (0-based), yearCols [],
+//           yearMetadata: { year: { is_estimate, raw_header } } }
 function findYearHeaderRow(ws) {
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   const maxScanRow = Math.min(range.e.r, 30); // only scan first 30 rows
 
   for (let r = 0; r <= maxScanRow; r++) {
     const yearsFound = [];
+    const yearMeta = {};
     for (let c = 0; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r, c });
       const cell = ws[addr];
       if (!cell) continue;
-      const yr = extractYear(cell.v);
-      if (yr) yearsFound.push({ col: c, year: yr });
+      const rawHeader = cell.v;
+      const yr = extractYear(rawHeader);
+      if (yr) {
+        yearsFound.push({ col: c, year: yr });
+        yearMeta[yr] = {
+          is_estimate: isEstimateHeader(rawHeader),
+          raw_header: String(rawHeader).trim(),
+        };
+      }
     }
     if (yearsFound.length >= 3) {
       // Found year header row
-      // Data starts 1-2 rows after — skip any "Currency" row
+      // Data starts 1-2 rows after -- skip any "Currency" row
       let dataStartRow = r + 1;
       const nextAddr = XLSX.utils.encode_cell({ r: dataStartRow, c: 0 });
       const nextCell = ws[nextAddr];
       if (nextCell && String(nextCell.v).toLowerCase().includes('currency')) {
         dataStartRow += 1; // skip currency row
       }
-      return { headerRow: r, dataStartRow, yearCols: yearsFound };
+      return { headerRow: r, dataStartRow, yearCols: yearsFound, yearMetadata: yearMeta };
     }
   }
   return null;
@@ -141,19 +175,30 @@ function extractSheetMeta(ws) {
     company:       null,
     units:         null,
     years:         [],
+    yearMetadata:  {},    // { year: { is_estimate, raw_header } }
     headerRow:     null,
     dataStartRow:  null,
+    format:        'simple', // 'simple' | 'capiq'
   };
 
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
 
-  // ── Try to find year header row (works for both simple and Capital IQ) ──
+  // -- Try to find year header row (works for both simple and Capital IQ) --
   const found = findYearHeaderRow(ws);
 
   if (found) {
     meta.headerRow    = found.headerRow;
     meta.dataStartRow = found.dataStartRow;
     meta.years        = found.yearCols.map(yc => yc.year);
+    meta.yearMetadata = found.yearMetadata || {};
+
+    // Detect Capital IQ format: header row > 3 (metadata rows above)
+    // or multiline year headers containing month names
+    const sampleHeader = Object.values(meta.yearMetadata)[0];
+    if (found.headerRow > 3 ||
+        (sampleHeader && /\n/.test(sampleHeader.raw_header))) {
+      meta.format = 'capiq';
+    }
 
     // Company name: scan rows above headerRow for a title string
     for (let r = 0; r < found.headerRow; r++) {
@@ -172,7 +217,7 @@ function extractSheetMeta(ws) {
     meta.units = extractUnitsFromMeta(ws, found.headerRow);
 
   } else {
-    // Fallback: simple format — A1=company, A2=units, row 4=years
+    // Fallback: simple format -- A1=company, A2=units, row 4=years
     const a1 = ws['A1'];
     if (a1) meta.company = String(a1.v).trim();
     const a2 = ws['A2'];
@@ -180,13 +225,21 @@ function extractSheetMeta(ws) {
 
     meta.headerRow    = 3; // row 4 (0-based)
     meta.dataStartRow = 4; // row 5
+    meta.format       = 'simple';
 
     for (let col = 1; col <= range.e.c; col++) {
       const addr = XLSX.utils.encode_cell({ r: 3, c: col });
       const cell = ws[addr];
       if (!cell || cell.v === undefined || cell.v === '') break;
-      const yr = extractYear(cell.v);
-      if (yr) meta.years.push(yr);
+      const rawHeader = cell.v;
+      const yr = extractYear(rawHeader);
+      if (yr) {
+        meta.years.push(yr);
+        meta.yearMetadata[yr] = {
+          is_estimate: isEstimateHeader(rawHeader),
+          raw_header: String(rawHeader).trim(),
+        };
+      }
     }
   }
 
@@ -250,12 +303,31 @@ function ingestFile(file) {
         ...sheetNames.filter(n => !preferred.includes(n)),
       ];
 
+      // Pick years from the best financial statement sheet (income > cashflow > balance)
+      // rather than whichever sheet has the most columns (which could be a quarterly
+      // sheet like Multiples with 60 columns that misaligns with annual data).
+      let yearsSource = null;
       for (const name of orderedNames) {
         const s = detected[name];
         if (!companyName && s.meta.company) companyName = s.meta.company;
         if (!units       && s.meta.units)   units       = s.meta.units;
-        if (s.meta.years.length > years.length) years   = s.meta.years;
+        // Prefer years from the first preferred sheet that has them
+        if (!yearsSource && preferred.includes(name) && s.meta.years.length >= 3) {
+          years       = s.meta.years;
+          yearsSource = name;
+        }
       }
+      // Fallback: if no preferred sheet had years, use the sheet with the most
+      if (!yearsSource) {
+        for (const name of orderedNames) {
+          const s = detected[name];
+          if (s.meta.years.length > years.length) {
+            years       = s.meta.years;
+            yearsSource = name;
+          }
+        }
+      }
+      console.log('[DCF] Years source sheet:', yearsSource, '(' + years.length + ' years)');
 
       // Warn if still no years
       if (years.length === 0) {
@@ -267,21 +339,49 @@ function ingestFile(file) {
         state.warnings.push('No income statement, cash flow, or summary sheet detected. Check sheet names.');
       }
 
+      // Merge yearMetadata from the years source sheet
+      let yearMetadata = {};
+      let detectedFormat = 'simple';
+      if (yearsSource && detected[yearsSource]) {
+        yearMetadata = detected[yearsSource].meta.yearMetadata || {};
+        detectedFormat = detected[yearsSource].meta.format || 'simple';
+      }
+
+      // Filter to actuals-only years by default (exclude estimates)
+      // Preserve full year list for reference; downstream can use yearMetadata
+      const actualYears = years.filter(y => {
+        const m = yearMetadata[y];
+        return !m || !m.is_estimate;
+      });
+
       state.rawData = {
-        fileName:    file.name,
+        fileName:      file.name,
         sheetNames,
-        sheets:      detected,
-        companyName: companyName || file.name.replace(/\.[^.]+$/, ''),
-        units:       units || '$M',
-        years,
+        sheets:        detected,
+        companyName:   companyName || file.name.replace(/\.[^.]+$/, ''),
+        units:         units || '$M',
+        years,                    // all years (actuals + estimates)
+        actualYears,              // actuals only (no estimates)
+        yearMetadata,             // { year: { is_estimate, raw_header } }
+        format:        detectedFormat, // 'simple' | 'capiq'
       };
 
-      console.log('[DCF] state.rawData populated:', {
-        company: state.rawData.companyName,
-        units:   state.rawData.units,
-        years:   state.rawData.years,
-        sheets:  Object.keys(detected).map(n => `${n} (${detected[n].type})`),
+      // -- PHASE 4: Validation console summary --
+      const estCount = years.filter(y => yearMetadata[y] && yearMetadata[y].is_estimate).length;
+      const sheetSummary = Object.entries(detected).map(([n, s]) => {
+        return `${n} (${s.type}, ${s.rows.length} rows)`;
       });
+      console.log('[DCF] === Ingestion Summary ===');
+      console.log('[DCF] Format detected:', detectedFormat);
+      console.log('[DCF] Company:', state.rawData.companyName);
+      console.log('[DCF] Units:', state.rawData.units);
+      console.log('[DCF] Years detected:', years.join(', '));
+      console.log('[DCF] Actual years:', actualYears.join(', '));
+      console.log('[DCF] Estimate years:', estCount);
+      console.log('[DCF] Year metadata:', yearMetadata);
+      console.log('[DCF] Sheets:', sheetSummary);
+      console.log('[DCF] Years source sheet:', yearsSource);
+      console.log('[DCF] === End Ingestion Summary ===');
 
       // Task 03: parse numbers + fuzzy-match line items
       if (typeof normalizeData === 'function') normalizeData();
@@ -316,6 +416,15 @@ function ingestFile(file) {
 
       // Task 11B: render searchable glossary panel
       if (typeof renderGlossary === 'function') renderGlossary();
+
+      // Task 12: render raw source data tabs
+      if (typeof renderRawDataTabs === 'function') renderRawDataTabs();
+
+      // Task 13: render DCF diagnostics
+      if (typeof renderDiagnostics === 'function') renderDiagnostics();
+
+      // Task 14–16: populate context panel with initial report
+      if (typeof refreshContextPanel === 'function') refreshContextPanel();
 
       // Update header brand
       const elName = document.getElementById('company-name');

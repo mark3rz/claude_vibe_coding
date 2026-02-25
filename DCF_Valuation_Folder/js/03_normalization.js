@@ -53,47 +53,69 @@ function fuzzyMatch(label, aliases) {
 // Keys become property names in state.historical.metrics.
 // Each value is a list of substrings to match against row[0].
 const LINE_ITEM_ALIASES = {
-  // Revenue — Capital IQ: "Total Revenue" (with leading spaces), also "Revenue"
+  // Revenue -- Capital IQ: "Total Revenue" (with leading spaces), also "Revenue"
   revenue:          ['total revenue', 'net revenue', 'net sales', 'revenue', 'sales'],
-  // COGS — Capital IQ: "Cost Of Goods Sold"
+  // COGS -- Capital IQ: "Cost Of Goods Sold"
   cogs:             ['cost of goods sold', 'cost of goods', 'cogs', 'cost of revenue', 'cost of sales'],
-  // Gross Profit — Capital IQ: "  Gross Profit"
+  // Gross Profit -- Capital IQ: "  Gross Profit"
   grossProfit:      ['gross profit'],
-  // EBITDA — Capital IQ Key Stats: "EBITDA"
+  // EBITDA -- Capital IQ Key Stats: "EBITDA"
   ebitda:           ['ebitda'],
-  // EBIT — Capital IQ: "  Operating Income", "EBIT"
+  // EBIT -- Capital IQ: "  Operating Income", "EBIT"
   ebit:             ['operating income', 'ebit', 'operating profit'],
-  // D&A — Capital IQ: "Depreciation & Amort.", "Depreciation & Amort., Total"
+  // D&A -- Capital IQ: "Depreciation & Amort.", "Depreciation & Amort., Total"
   depreciation:     ['depreciation & amort., total', 'depreciation & amort.', 'depreciation & amortization',
                      'depreciation and amort', 'd&a', 'da'],
-  // Interest Expense — Capital IQ: "Interest Expense"
+  // Interest Expense -- Capital IQ: "Interest Expense"
   interestExpense:  ['interest expense', 'net interest exp', 'interest cost', 'finance cost'],
-  // Tax — Capital IQ: "Income Tax Expense"
+  // Tax -- Capital IQ: "Income Tax Expense"
   incomeTax:        ['income tax expense', 'income tax', 'tax expense', 'provision for tax'],
-  // Net Income — Capital IQ: "  Net Income" (with leading spaces), "Net Income to Company"
+  // Net Income -- Capital IQ: "  Net Income" (with leading spaces), "Net Income to Company"
   netIncome:        ['net income', 'net profit', 'net earnings', 'profit after tax', 'pat',
                      'earnings from cont. ops'],
-  // CapEx — Capital IQ: "Capital Expenditure"
+  // CapEx -- Capital IQ: "Capital Expenditure"
   capex:            ['capital expenditure', 'capital expenditures', 'capex',
                      'purchases of property', 'ppe purchase'],
-  // Operating Cash Flow — Capital IQ: "  Cash from Ops."
+  // Operating Cash Flow -- Capital IQ: "  Cash from Ops."
   operatingCashFlow:['cash from ops', 'cash from operations', 'operating cash flow',
                      'net cash from operating', 'cfo'],
   // Free Cash Flow
-  freeCashFlow:     ['free cash flow', 'fcf'],
-  // Total Assets — Capital IQ: "Total Assets" (no leading spaces)
+  freeCashFlow:     ['free cash flow', 'fcf', 'levered free cash flow',
+                     'unlevered free cash flow'],
+  // Total Assets -- Capital IQ: "Total Assets" (no leading spaces)
   totalAssets:      ['total assets'],
-  // Total Debt — Capital IQ: "Long-Term Debt", "Curr. Port. of LT Debt"
+  // Total Debt -- Capital IQ: "Long-Term Debt", "Curr. Port. of LT Debt"
   totalDebt:        ['long-term debt', 'total debt', 'total borrowings', 'total debt issued'],
-  // Cash — Capital IQ: "Cash And Equivalents", "  Total Cash & ST Investments"
+  // Cash -- Capital IQ: "Cash And Equivalents", "  Total Cash & ST Investments"
   cash:             ['total cash & st invest', 'cash and equivalents', 'cash & equivalents',
                      'cash and cash equiv', 'cash & cash equiv'],
-  // Total Equity — Capital IQ Balance Sheet rows 60+
+  // Total Equity -- Capital IQ Balance Sheet rows 60+
   totalEquity:      ['total equity', "total shareholders' equity", 'stockholders equity',
                      'shareholders equity', 'book value of common equity', 'common equity'],
-  // Shares — Capital IQ Key Stats: "Shares Out."
+  // Shares -- Capital IQ Key Stats: "Shares Out."
   sharesOutstanding:['shares out.', 'shares outstanding', 'diluted shares',
-                     'weighted average shares', 'diluted weighted average'],
+                     'weighted average shares', 'diluted weighted average',
+                     'basic shares outstanding'],
+  // --- Additional Capital IQ metrics per DCF_Tutor spec ---
+  // Change in NWC -- Capital IQ Cash Flow: "Change In Net Working Capital"
+  changeInNWC:      ['change in net working capital', 'changes in working capital',
+                     'change in working capital', 'net working capital change',
+                     'working capital changes'],
+  // Current Assets -- for NWC derivation
+  currentAssets:    ['total current assets', 'current assets'],
+  // Current Liabilities -- for NWC derivation
+  currentLiabilities: ['total current liabilities', 'current liabilities'],
+  // EV/EBITDA -- Capital IQ Multiples sheet (for exit multiple suggestion)
+  evToEbitda:       ['ev/ebitda', 'tev/ebitda', 'enterprise value/ebitda',
+                     'total enterprise value / ebitda'],
+  // Short-term debt -- Capital IQ: "Curr. Port. of LT Debt"
+  shortTermDebt:    ['curr. port. of lt debt', 'current portion of long-term debt',
+                     'short-term debt', 'short term borrowings'],
+  // Preferred equity -- for equity bridge
+  preferredEquity:  ['preferred stock', 'preferred equity', 'preferred shares'],
+  // Minority interest -- for equity bridge
+  minorityInterest: ['minority interest', 'non-controlling interest',
+                     'noncontrolling interest'],
 };
 
 // --- Extract a numeric series for a matched label ---
@@ -145,11 +167,14 @@ function normalizeData() {
     return;
   }
 
-  // Gather rows — income statement data first, then cash flow, then rest
-  const incomeRows   = collectRows(sheets, ['income']);
-  const cashRows     = collectRows(sheets, ['cashflow']);
-  const balanceRows  = collectRows(sheets, ['balance']);
-  const allRows      = collectRows(sheets, ['income', 'cashflow', 'balance', 'summary', 'unknown']);
+  // Gather rows -- income statement data first, then cash flow, then rest
+  const incomeRows    = collectRows(sheets, ['income']);
+  const cashRows      = collectRows(sheets, ['cashflow']);
+  const balanceRows   = collectRows(sheets, ['balance']);
+  const multiplesRows = collectRows(sheets, ['multiples']);
+  const summaryRows   = collectRows(sheets, ['summary']);
+  const allRows       = collectRows(sheets, ['income', 'cashflow', 'balance',
+                                              'multiples', 'summary', 'unknown']);
 
   const metrics = {};
 
@@ -160,12 +185,16 @@ function normalizeData() {
     let preferredRows;
     if (['revenue','cogs','grossProfit','ebit','depreciation','interestExpense','incomeTax','netIncome'].includes(key)) {
       preferredRows = incomeRows;
-    } else if (['capex','operatingCashFlow','freeCashFlow'].includes(key)) {
+    } else if (['capex','operatingCashFlow','freeCashFlow','changeInNWC'].includes(key)) {
       preferredRows = cashRows;
-    } else if (['totalAssets','totalDebt','cash','totalEquity'].includes(key)) {
+    } else if (['totalAssets','totalDebt','cash','totalEquity','currentAssets',
+                'currentLiabilities','shortTermDebt','preferredEquity','minorityInterest'].includes(key)) {
       preferredRows = balanceRows;
+    } else if (['evToEbitda'].includes(key)) {
+      // EV/EBITDA lives in Multiples or Key Stats sheets
+      preferredRows = multiplesRows.length > 0 ? multiplesRows : summaryRows;
     } else {
-      // ebitda, sharesOutstanding, freeCashFlow — search everywhere
+      // ebitda, sharesOutstanding -- search everywhere
       preferredRows = allRows;
     }
 
@@ -193,10 +222,20 @@ function normalizeData() {
   // Store result
   state.historical = {
     years,
+    yearMetadata: state.rawData.yearMetadata || {},
     metrics,
     derived: {}, // Task 04 will populate this
   };
 
-  console.log('[DCF] state.historical populated. Years:', years);
+  // -- PHASE 4: Normalization validation summary --
+  const foundCount = Object.values(metrics).filter(v => v !== null).length;
+  const totalCount = Object.keys(metrics).length;
+  console.log('[DCF] === Normalization Summary ===');
+  console.log('[DCF] Years:', years.join(', '));
+  console.log('[DCF] Metrics found:', foundCount, '/', totalCount);
+  if (metrics.revenue) {
+    console.log('[DCF] Sample revenue:', metrics.revenue);
+  }
+  console.log('[DCF] === End Normalization Summary ===');
   renderWarnings();
 }

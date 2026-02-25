@@ -213,28 +213,21 @@ function renderSensitivity() {
   });
 
   container.innerHTML = `
-    <div class="card-elevated" style="margin-bottom:0;">
-      <h2 class="h2" style="margin-bottom:var(--space-2);">Sensitivity Analysis</h2>
-      <p class="body" style="margin-bottom:var(--space-5);">Implied share price across key assumption ranges. Base case highlighted.</p>
-
-      <div class="sens-grid">
-        <div>
-          <p class="h3" style="margin-bottom:var(--space-4);">Table A — WACC vs Terminal Growth</p>
-          ${tableA}
-        </div>
-        <div>
-          <p class="h3" style="margin-bottom:var(--space-4);">Table B — Revenue Growth vs EBIT Margin</p>
-          ${tableB}
-        </div>
+    <p class="caption" style="margin-bottom:6px;">Sensitivity Analysis</p>
+    <div class="sens-grid">
+      <div>
+        <p class="caption" style="margin-bottom:4px;font-size:0.5625rem;">WACC vs Terminal Growth</p>
+        ${tableA}
       </div>
-
-      <div class="sens-legend">
-        <div class="sens-legend-bar"></div>
-        <div class="sens-legend-labels">
-          <span>Lower value</span>
-          <span>Base case</span>
-          <span>Higher value</span>
-        </div>
+      <div>
+        <p class="caption" style="margin-bottom:4px;font-size:0.5625rem;">Rev Growth vs EBIT Margin</p>
+        ${tableB}
+      </div>
+    </div>
+    <div class="sens-legend" style="margin-top:6px;">
+      <div class="sens-legend-bar" style="height:6px;"></div>
+      <div class="sens-legend-labels">
+        <span>Lower</span><span>Base</span><span>Higher</span>
       </div>
     </div>
   `;

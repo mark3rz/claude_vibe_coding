@@ -134,54 +134,49 @@ function renderExecutiveSummary() {
   const units = state.rawData?.units || '';
 
   const upsideClass = s.upside == null ? '' : s.upside >= 0 ? 'text-success' : 'text-danger';
-  const irrVsWacc  = s.irr != null && s.wacc != null
-    ? (s.irr >= s.wacc ? '<span class="text-success">IRR &gt; WACC ✓</span>' : '<span class="text-danger">IRR &lt; WACC ✗</span>')
-    : '';
 
   container.innerHTML = `
-    <div class="card-elevated" style="margin-bottom: 0;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--space-5);">
-        <h2 class="h2">Executive Summary</h2>
-        ${irrVsWacc ? `<span class="caption" style="font-size:0.8125rem;">${irrVsWacc}</span>` : ''}
-      </div>
-
-      <div class="grid-6">
-        ${metricTile('Enterprise Value', fmtCurrency(s.enterpriseValue, units), 'text-terminal', 'EV = NPV of FCFs + PV of Terminal Value')}
-        ${metricTile('Equity Value / Share', s.impliedPrice != null ? fmtPrice(s.impliedPrice) : fmtCurrency(s.equityValue, units), '', 'EV − Net Debt ÷ Shares Outstanding')}
-        ${metricTile('NPV of FCFs', fmtCurrency(s.npvFCF, units), '', 'Sum of discounted forecast free cash flows')}
-        ${metricTile('Terminal Value (PV)', fmtCurrency(s.pvTerminal, units), '', 'Gordon Growth: FCF × (1+g) ÷ (WACC − g), discounted')}
-        ${metricTile('IRR', fmtPct(s.irr), s.irr != null && s.irr >= s.wacc ? 'text-success' : 'text-danger', 'Internal rate of return on equity cash flows')}
-        ${metricTile('Upside / Downside', fmtUpside(s.upside), upsideClass, s.currentPrice ? `vs current price ${fmtPrice(s.currentPrice)}` : 'Set current price in assumptions to calculate')}
-      </div>
-
-      <hr class="section-divider" style="margin:var(--space-5) 0;" />
-
-      <div class="grid-4">
-        ${bridgeTile('WACC', fmtPct(s.wacc))}
-        ${bridgeTile('Terminal Growth', fmtPct(s.terminalGrowth))}
-        ${bridgeTile('Net Debt', fmtCurrency(s.netDebt, units))}
-        ${bridgeTile('Forecast Years', state.dcf.inputs.forecastYears + 'Y')}
-      </div>
+    <div style="
+      display:flex;
+      align-items:center;
+      gap:16px;
+      flex-wrap:wrap;
+      padding:6px 10px;
+      background:var(--bg-tertiary);
+      border:1px solid var(--border-subtle);
+      border-radius:var(--radius-lg);
+    ">
+      ${inlineTile('EV', fmtCurrency(s.enterpriseValue, units), 'text-terminal')}
+      ${inlineTile('Equity/Share', s.impliedPrice != null ? fmtPrice(s.impliedPrice) : fmtCurrency(s.equityValue, units), '')}
+      ${inlineTile('NPV FCFs', fmtCurrency(s.npvFCF, units), '')}
+      ${inlineTile('PV Terminal', fmtCurrency(s.pvTerminal, units), '')}
+      ${inlineTile('IRR', fmtPct(s.irr), s.irr != null && s.irr >= s.wacc ? 'text-success' : 'text-danger')}
+      ${inlineTile('Upside', fmtUpside(s.upside), upsideClass)}
+      <span style="border-left:1px solid var(--border-subtle);height:24px;margin:0 2px;"></span>
+      ${inlineTile('WACC', fmtPct(s.wacc), 'text-secondary')}
+      ${inlineTile('Term. Growth', fmtPct(s.terminalGrowth), 'text-secondary')}
+      ${inlineTile('Net Debt', fmtCurrency(s.netDebt, units), 'text-secondary')}
+      ${inlineTile('Forecast', state.dcf.inputs.forecastYears + 'Y', 'text-secondary')}
     </div>
   `;
 }
 
-function metricTile(label, value, valueClass, tooltip) {
+function inlineTile(label, value, valueClass) {
   return `
-    <div class="metric-card" title="${tooltip}">
-      <p class="caption" style="margin-bottom:var(--space-2);">${label}</p>
-      <p class="metric-number ${valueClass}">${value}</p>
+    <div style="display:flex;flex-direction:column;gap:0;min-width:0;">
+      <span style="font-size:0.5625rem;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);white-space:nowrap;">${label}</span>
+      <span class="${valueClass}" style="font-family:'SF Mono','Fira Code',monospace;font-size:0.8125rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;">${value}</span>
     </div>
   `;
+}
+
+// Keep legacy functions for backward compatibility (unused but harmless)
+function metricTile(label, value, valueClass, tooltip) {
+  return inlineTile(label, value, valueClass);
 }
 
 function bridgeTile(label, value) {
-  return `
-    <div style="display:flex;flex-direction:column;gap:var(--space-1);">
-      <span class="caption">${label}</span>
-      <span style="font-family:monospace;font-size:0.9375rem;font-weight:600;color:var(--text-secondary);">${value}</span>
-    </div>
-  `;
+  return inlineTile(label, value, 'text-secondary');
 }
 
 // --- Main entry point — called after calculateDCF() ---

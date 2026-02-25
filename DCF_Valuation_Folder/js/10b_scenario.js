@@ -263,36 +263,23 @@ function renderScenario() {
   _scenarioBaseInputs = { ...state.inputs };
 
   container.innerHTML = `
-    <div class="card-elevated" style="margin-bottom:0;">
-      <h2 class="h2" style="margin-bottom:var(--space-2);">Scenario Builder</h2>
-      <p class="body" style="margin-bottom:var(--space-5);">Adjust sliders to explore scenarios. Valuation updates live.</p>
-
-      <div class="scenario-layout">
-
-        <!-- LEFT: Sliders -->
-        <div class="scenario-sliders">
-          <p class="h3" style="margin-bottom:var(--space-4);">Input Assumptions</p>
-          <div class="sliders-list">
-            ${SCENARIO_SLIDERS.filter(s => s.key !== 'exitMultiple').map(buildSliderRow).join('')}
-          </div>
-          <button class="btn-secondary" id="btn-reset-scenario" style="margin-top:var(--space-4);width:100%;">
-            ↺ Reset to Base Case
-          </button>
+    <p class="caption" style="margin-bottom:6px;">Scenario Builder</p>
+    <div class="scenario-layout">
+      <div class="scenario-sliders">
+        <div class="sliders-list">
+          ${SCENARIO_SLIDERS.filter(s => s.key !== 'exitMultiple').map(buildSliderRow).join('')}
         </div>
-
-        <!-- RIGHT: Delta output -->
-        <div class="scenario-output">
-          <p class="h3" style="margin-bottom:var(--space-4);">Scenario vs Base Case</p>
-          <div id="scenario-delta-panel"></div>
-
-          <!-- Tornado chart -->
-          <div style="margin-top:var(--space-5);">
-            <div style="position:relative;height:280px;">
-              <canvas id="canvas-tornado"></canvas>
-            </div>
+        <button class="btn-secondary" id="btn-reset-scenario" style="margin-top:6px;width:100%;">
+          ↺ Reset
+        </button>
+      </div>
+      <div class="scenario-output">
+        <div id="scenario-delta-panel"></div>
+        <div style="margin-top:6px;">
+          <div style="position:relative;height:200px;">
+            <canvas id="canvas-tornado"></canvas>
           </div>
         </div>
-
       </div>
     </div>
   `;
