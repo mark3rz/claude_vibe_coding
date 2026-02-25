@@ -1,0 +1,6 @@
+TASK 8 — DCF Projection Table
+
+Render: - Base year + forecast years - Mid-year discounting - Terminal
+value - Valuation bridge - Highlight implied share price
+
+DEFINITION OF DONE: - Table ties out to enterprise value.

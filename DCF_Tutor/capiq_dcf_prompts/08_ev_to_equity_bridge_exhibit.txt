@@ -1,0 +1,21 @@
+Implement an EV to Equity waterfall chart.
+
+Inputs:
+- Enterprise Value (computed)
+- Net Debt (from Balance Sheet if available, else user input)
+- Preferred Equity (default 0, advanced)
+- Minority Interest (default 0, advanced)
+- Other adjustments (default 0, advanced)
+
+Waterfall steps:
+- Start: Enterprise Value
+- Subtract: Net Debt
+- Subtract: Preferred Equity
+- Subtract: Minority Interest
+- Add/Subtract: Other adjustments
+- End: Equity Value
+
+Render with plotly waterfall.
+Also show a numeric bridge table.
+
+All values must update when assumptions change.

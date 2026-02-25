@@ -1,0 +1,25 @@
+Write a short demo walkthrough script (for the mentor) and implement the learning layer.
+
+Demo walkthrough (talk track):
+1) Upload Capital IQ xlsx
+2) Show Raw tabs to prove the app preserves exact data
+3) Show Mapping confidence and standardized statements (IS/BS/CF/Multiples)
+4) Go to DCF:
+   - Pick Base scenario
+   - Show EV, Equity, Price and the EV->Equity bridge waterfall
+   - Change EBITDA margin and show all charts update
+   - Show sensitivity table (WACC vs g)
+   - Show tornado chart and explain biggest drivers
+5) Scroll to WACC explanation section:
+   - Show computed WACC inputs and formula
+   - Compare computed WACC vs direct-input override
+
+Explain-this content dictionary:
+- For each assumption include:
+  - definition
+  - formula (LaTeX)
+  - typical directionality (eg "Higher WACC reduces PV")
+Keep text concise and educational.
+
+Forecast start rule:
+- Forecast begins after the LAST ACTUAL year (default). If "include estimates as history" is enabled, forecast begins after the last included year.

@@ -1,0 +1,8 @@
+TASK 11 — Tooltip System + Glossary
+
+Implement: - Custom tooltip component (not native title) - Wire ⓘ icons
+to metrics - Searchable glossary panel
+
+Must: - Not interfere with existing calculations - Not break layout
+
+DEFINITION OF DONE: - Every major metric has educational tooltip.

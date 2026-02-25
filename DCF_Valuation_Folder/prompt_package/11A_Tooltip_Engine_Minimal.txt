@@ -1,0 +1,16 @@
+TASK 11A — Tooltip Engine (Minimal Data Set)
+
+Continue working in dcf_dashboard.html.
+
+SCOPE: - Implement tooltip engine structure ONLY. - Use small subset of
+TOOLTIP_DATA (10–15 metrics max). - Do NOT load full glossary dataset
+yet.
+
+REQUIREMENTS: 1) Custom tooltip component (not native title). 2) Hover
+on desktop, click on mobile. 3) Tooltip must support: - Definition -
+Formula - Good / Watch / Red Flag 4) Position intelligently (avoid
+viewport overflow). 5) Must not interfere with existing layout or
+calculations.
+
+DEFINITION OF DONE: - Tooltips render correctly for selected metrics. -
+No large TOOLTIP_DATA object included yet.

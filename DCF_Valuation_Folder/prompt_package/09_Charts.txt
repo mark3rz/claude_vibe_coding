@@ -1,0 +1,7 @@
+TASK 9 — Core Charts
+
+Add Chart.js charts: - EV waterfall - Historical FCF - Revenue + EBITDA
+
+Must: - Use dark theme - Destroy and recreate charts safely on update
+
+DEFINITION OF DONE: - Charts update without duplication.

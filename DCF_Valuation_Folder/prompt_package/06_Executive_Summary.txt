@@ -1,0 +1,10 @@
+TASK 6 — Header + Executive Metrics
+
+Wire DCF results to UI.
+
+Render: - Enterprise Value - Equity Value per Share - NPV of FCFs -
+IRR - WACC - Upside/Downside
+
+Animate using requestAnimationFrame.
+
+DEFINITION OF DONE: - Metrics animate and update on recalculation.

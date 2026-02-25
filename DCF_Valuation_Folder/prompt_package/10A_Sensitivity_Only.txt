@@ -1,0 +1,18 @@
+TASK 10A — Sensitivity Tables Only
+
+Continue working in dcf_dashboard.html.
+
+SCOPE: - Implement ONLY sensitivity tables. - Do NOT implement sliders
+or tornado chart. - Do NOT refactor existing logic.
+
+REQUIREMENTS: 1) Build Sensitivity Table A: - Implied Share Price: WACC
+vs Terminal Growth. 2) Build Sensitivity Table B: - Implied Share Price:
+Revenue Growth vs EBIT Margin. 3) Use buildSensitivityTable() helper. 4)
+Color scale must be red → white → green centered on base case. 5)
+Highlight base case cell with strong border.
+
+PERFORMANCE RULES: - Limit grid size. - Avoid recalculating full DCF
+unnecessarily. - No blocking UI.
+
+DEFINITION OF DONE: - Both sensitivity tables render correctly and
+update when recalculated. - No slider logic exists yet.

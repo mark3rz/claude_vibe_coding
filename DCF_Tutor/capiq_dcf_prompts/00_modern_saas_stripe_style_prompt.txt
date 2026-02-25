@@ -1,0 +1,191 @@
+You are a senior fintech product designer and front-end engineer.
+
+Your task is to globally refactor and style the entire Capital IQ DCF learning tool to have a modern SaaS fintech aesthetic inspired by Stripe.
+
+This is a professional financial product, but it should feel:
+- Clean
+- Elegant
+- Airy
+- Confident
+- Minimal
+- Intuitive
+- Design-forward but not flashy
+
+This should feel like:
+- Stripe Dashboard
+- Modern B2B fintech SaaS
+- A well-funded startup valuation platform
+- Institutional but accessible
+
+Core Design Principles:
+1. Light-first UI with optional dark mode toggle.
+2. High whitespace usage.
+3. Clean grid system.
+4. Soft shadows and subtle depth.
+5. Smooth spacing and alignment.
+6. Clear visual hierarchy.
+7. Typography-driven design.
+
+Color System (Stripe-inspired):
+
+Light Mode:
+- Background: #F6F9FC
+- Card background: #FFFFFF
+- Border: #E6EBF1
+- Primary accent: #635BFF
+- Secondary accent: #0A2540
+- Positive values: #16B364
+- Negative values: #D92D20
+- Text primary: #0A2540
+- Text secondary: #475467
+
+Dark Mode (optional toggle):
+- Background: #0A2540
+- Card background: #111827
+- Border: #1F2937
+- Primary accent: #7C72FF
+- Text primary: #E6EDF3
+- Text secondary: #94A3B8
+
+Typography:
+- Use Inter or similar clean SaaS font.
+- Clear hierarchy:
+  - H1: 28–32px
+  - H2: 20–24px
+  - H3: 16–18px
+- Numeric values slightly larger than surrounding text.
+- Financial tables use tabular numbers (monospaced optional).
+- Always right-align numbers.
+- Use thousands separators.
+- Show negatives in parentheses.
+
+Layout:
+
+Navigation:
+- Collapsible left sidebar.
+- Clean icon + label.
+- Minimal separators.
+
+Page Structure:
+- Page title at top with subtle subtitle.
+- Top metrics row in clean cards:
+  - Enterprise Value
+  - Equity Value
+  - Price per Share
+- Cards use soft shadow and 8px rounded corners.
+- Balanced padding.
+
+Grid:
+- Use consistent 12-column responsive grid.
+- Strong alignment between assumption panels and output panels.
+
+Charts:
+
+Charts should feel like Stripe analytics:
+- White background (light mode).
+- Subtle gridlines.
+- Thin axes.
+- Clean legends.
+- No heavy borders.
+- Smooth transitions allowed but subtle.
+
+Waterfall:
+- Clean bar spacing.
+- Primary accent for total.
+- Neutral grey for intermediate components.
+- Soft rounded corners on bars.
+
+Tornado:
+- Horizontal bars.
+- Primary accent for positive impact.
+- Muted grey for baseline.
+- Clean labels aligned left.
+
+Sensitivity Table:
+- Clean grid.
+- Subtle hover highlight.
+- Optional light color gradient but very restrained.
+- Avoid Excel-style harsh coloring.
+
+Inputs:
+
+Assumption Inputs:
+- Styled like modern SaaS forms.
+- Soft borders.
+- Focus state with primary accent glow.
+- Inline labels above inputs.
+- Clean spacing between sections.
+
+Scenario Selector:
+- Styled segmented control (Base / Upside / Downside).
+- Smooth toggle transitions.
+
+Advanced Sections:
+- Collapsible panels with smooth animation.
+- Clear separation between Basic and Advanced.
+
+WACC Section:
+
+- Present formulas in elegant math blocks.
+- Clear breakdown sections:
+  - Cost of Equity
+  - Cost of Debt
+  - Capital Structure
+- Use subtle boxed containers.
+
+DCF Table:
+
+- Clean structured forecast table.
+- Historical visually muted.
+- Forecast visually emphasized.
+- Terminal column lightly highlighted.
+- FCFF row bold and slightly emphasized.
+
+Explain Panel:
+
+- Slide-out right panel.
+- Light background with border.
+- Clear headings.
+- Short, crisp definitions.
+- Formula rendered cleanly.
+- Tone professional but approachable.
+
+Micro-Interactions:
+
+- Subtle hover states.
+- Smooth transitions (not flashy).
+- Consistent button styling.
+- Primary buttons in accent color.
+- Secondary buttons outlined.
+
+Brand Tone:
+
+- Feels trustworthy.
+- Feels modern.
+- Feels premium.
+- No corporate stiffness.
+- No dark institutional heaviness.
+- No gamification.
+
+Refactor Requirements:
+
+- Centralize theme variables.
+- Implement global style configuration.
+- Ensure all charts inherit theme colors.
+- Standardize number formatting.
+- Standardize spacing scale.
+- Improve visual hierarchy across:
+  - Import page
+  - Mapping page
+  - Standardized Financials
+  - DCF page
+  - Sensitivity
+  - Tornado
+  - Waterfall
+  - WACC explanation
+  - Explain panel
+
+Do not change business logic.
+Only refactor styling, layout, formatting, spacing, and UI components.
+
+The final result should look like a modern venture-backed fintech SaaS valuation platform.

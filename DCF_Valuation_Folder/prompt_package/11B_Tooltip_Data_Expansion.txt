@@ -1,0 +1,17 @@
+TASK 11B — Expand Tooltip Data + Glossary
+
+Continue working in dcf_dashboard.html.
+
+SCOPE: - Expand TOOLTIP_DATA to full metric coverage. - Implement
+searchable glossary panel. - Do NOT modify tooltip engine logic.
+
+REQUIREMENTS: 1) Add remaining metric definitions incrementally. 2) Keep
+definitions concise and structured. 3) Build searchable glossary: -
+Filter by metric name. - Render cards using existing component classes.
+4) Ensure performance remains smooth.
+
+TOKEN RULE: - Do not rewrite existing file. - Append data in organized
+section only.
+
+DEFINITION OF DONE: - All major metrics have tooltips. - Glossary search
+works. - No performance degradation.

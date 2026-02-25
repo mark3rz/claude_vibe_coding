@@ -1,0 +1,1868 @@
+<!--
+  DCF Valuation Dashboard - Capital IQ Ingestion Adapter
+  ======================================================
+  Supported Capital IQ formats:
+    A) Simple format: company in A1, units in A2, years in row 4
+    B) Capital IQ/FactSet: metadata rows 1-14, multiline year headers
+       in row 15 (e.g. "12 months\nNov-29-2019"), data from row 17+
+    C) Capital IQ "2020 FY" style: year headers like "2020 FY", "2021E"
+
+  Schema derived from:
+    - DCF_Tutor/capiq_dcf_prompts/03_importer_build_plan.txt
+    - DCF_Tutor/capiq_dcf_prompts/04_data_model_storage_tabs.txt
+    - DCF_Tutor/capiq_dcf_prompts/05_dcf_engine_spec.txt
+
+  How the adapter works:
+    1) 02_ingestion.js detects format via header pattern (row position,
+       multiline vs single-line year labels, estimate tokens)
+    2) Extracts yearMetadata with is_estimate flag per year
+    3) 03_normalization.js fuzzy-matches row labels to canonical metrics
+       including new Capital IQ fields: changeInNWC, currentAssets,
+       currentLiabilities, evToEbitda, preferredEquity, minorityInterest
+    4) 05_dcf_engine.js uses D&A % of revenue and NWC % of revenue
+       as forecast drivers (instead of hardcoded ratios), and suggests
+       exit multiple from Multiples tab EV/EBITDA when available
+    5) All existing render functions remain untouched
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCF Valuation Dashboard</title>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Task 00A — Design System -->
+  <link rel="stylesheet" href="css/design-system.css" />
+
+  <style>
+    /* ============================================================
+       TASK 01 — App Skeleton Styles
+       Layout for upload screen + dashboard shell.
+    ============================================================ */
+
+    /* Upload screen — transparent so bg-layer gradient shows through */
+    #upload-screen {
+      position: fixed;
+      inset: 0;
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+      z-index: 1000;
+      padding: var(--space-8) var(--space-5);
+    }
+
+    /* Spacers that flex-grow so card is centred when space allows,
+       but the card stays at top and scrolls normally when viewport is short */
+    #upload-screen::before,
+    #upload-screen::after {
+      content: '';
+      flex: 1 0 var(--space-6);
+    }
+
+    .upload-card {
+      background: rgba(24, 27, 34, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-xl);
+      padding: var(--space-8);
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow:
+        var(--shadow-lg),
+        0 0 60px rgba(40, 80, 160, 0.08),
+        0 0 120px rgba(40, 80, 160, 0.04);
+      backdrop-filter: blur(20px) saturate(1.2);
+      -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    }
+
+    .upload-icon {
+      width: 56px;
+      height: 56px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto var(--space-5);
+    }
+
+    .upload-icon svg {
+      width: 24px;
+      height: 24px;
+      stroke: var(--accent-primary);
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .upload-dropzone {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      border: 2px dashed var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+      margin: var(--space-5) 0;
+      cursor: pointer;
+      transition: border-color var(--transition-normal),
+                  background var(--transition-normal);
+    }
+
+    .upload-dropzone:hover,
+    .upload-dropzone.drag-over {
+      border-color: var(--accent-primary);
+      background: rgba(79, 142, 247, 0.04);
+    }
+
+    .upload-dropzone input[type="file"] {
+      display: none;
+    }
+
+    .upload-formats {
+      display: flex;
+      gap: var(--space-2);
+      justify-content: center;
+      margin-top: var(--space-3);
+    }
+
+    .format-badge {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: var(--space-1) var(--space-2);
+    }
+
+    /* Dashboard shell */
+    #dashboard-body {
+      display: none;
+      min-height: 100vh;
+    }
+
+    /* Top header bar */
+    #section-header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 16px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    .header-brand {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .header-brand .company-name {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .header-brand .company-meta {
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+    }
+
+    /* Executive metric strip */
+    .metric-strip {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .metric-strip-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-width: 80px;
+    }
+
+    .metric-strip-item .metric-label {
+      font-size: 0.5625rem;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .metric-strip-item .metric-value {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: var(--space-2);
+      align-items: center;
+    }
+
+    /* Main content area */
+    .dashboard-main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 10px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* Section placeholders */
+    .section-placeholder {
+      background: var(--bg-tertiary);
+      border: 1px dashed var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-style: italic;
+    }
+
+    /* Warnings banner */
+    #section-warnings {
+      display: none;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+    }
+
+    .warning-item {
+      font-size: 0.8125rem;
+      color: var(--accent-warning);
+      padding: var(--space-1) 0;
+    }
+
+    .warning-item::before {
+      content: '⚠ ';
+    }
+
+    /* Footer */
+    #section-footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: var(--space-5) 0;
+      text-align: center;
+    }
+
+    /* ---- Task 07: Assumptions Panel + Learning Panel ---- */
+
+    /* Two-panel layout: assumptions left, learning panel right */
+    .assumptions-learning-layout {
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 12px;
+      align-items: start;
+    }
+
+    @media (max-width: 1100px) {
+      .assumptions-learning-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .assumptions-left-panel {
+      min-width: 0;
+    }
+
+    .assumptions-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    @media (max-width: 1100px) {
+      .assumptions-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (max-width: 900px) {
+      .assumptions-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 640px) {
+      .assumptions-grid { grid-template-columns: 1fr; }
+    }
+
+    .assumption-group {
+      display: flex;
+      flex-direction: column;
+      padding: 8px 10px;
+      border-right: 1px solid var(--border-subtle);
+    }
+
+    .assumption-group:last-child { border-right: none; }
+
+    .assumption-group-title {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .assumption-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .assumption-field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 2px 0;
+    }
+
+    .assumption-field label,
+    .assumption-field .input-label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      flex-shrink: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      margin-bottom: 0;
+    }
+
+    .input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .assumption-field .input-control {
+      width: 60px;
+      height: 22px;
+      font-size: 0.75rem;
+      padding: 0 4px;
+      text-align: right;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+    }
+
+    /* Remove browser spinner arrows on number inputs */
+    .input-control[type="number"]::-webkit-outer-spin-button,
+    .input-control[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .input-control[type="number"] { -moz-appearance: textfield; }
+
+    .input-affix {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* WACC derived value */
+    .wacc-derived {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent-primary);
+      min-width: 60px;
+      text-align: right;
+    }
+
+    /* ---- Learning Panel ("Why did valuation move?") ---- */
+    .learning-right-panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .lp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-tertiary);
+    }
+
+    .lp-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+
+    .lp-base-btn {
+      font-size: 0.625rem !important;
+      padding: 2px 8px !important;
+      white-space: nowrap;
+    }
+
+    .lp-content {
+      padding: 10px 12px;
+      overflow-y: auto;
+      max-height: 520px;
+    }
+
+    .lp-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 80px;
+    }
+
+    .lp-empty-text {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+    }
+
+    .lp-auto-note {
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+      background: rgba(79, 142, 247, 0.06);
+      border: 1px solid rgba(79, 142, 247, 0.15);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    /* Summary cards */
+    .lp-summary-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .lp-summary-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 6px 10px;
+    }
+
+    .lp-summary-label {
+      font-size: 0.5625rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .lp-summary-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .lp-summary-base,
+    .lp-summary-current {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+
+    .lp-summary-base {
+      color: var(--text-muted);
+    }
+
+    .lp-summary-arrow {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .lp-summary-delta {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      margin-top: 1px;
+    }
+
+    /* Color classes for learning panel */
+    .lp-positive { color: var(--accent-success); }
+    .lp-negative { color: var(--accent-danger); }
+    .lp-neutral  { color: var(--text-muted); }
+
+    /* Sections */
+    .lp-section {
+      margin-bottom: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .lp-section-title {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    /* Narrative */
+    .lp-narrative-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .lp-narrative-list li {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      padding: 3px 0 3px 12px;
+      position: relative;
+    }
+
+    .lp-narrative-list li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+    }
+
+    /* Attribution table */
+    .lp-attr-table-wrap {
+      overflow-x: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .lp-attr-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.6875rem;
+    }
+
+    .lp-attr-th-driver,
+    .lp-attr-th {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+      font-size: 0.5625rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      text-align: right;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    .lp-attr-th-driver {
+      text-align: left;
+    }
+
+    .lp-attr-driver {
+      font-size: 0.6875rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      padding: 4px 8px;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .lp-attr-val {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      padding: 4px 8px;
+      text-align: right;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .lp-attr-note {
+      font-size: 0.625rem;
+      color: var(--text-muted);
+      font-style: italic;
+      margin-top: 4px;
+    }
+
+    /* Terminal value dependency callout */
+    .lp-tv-callout {
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-md);
+      padding: 8px 10px !important;
+      border: 1px solid var(--border-subtle) !important;
+      margin-top: 6px;
+    }
+
+    .lp-tv-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .lp-tv-label {
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+    }
+
+    .lp-tv-values {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .lp-tv-warn {
+      font-size: 0.6875rem;
+      color: var(--accent-warning);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* ---- Task 08: DCF Table ---- */
+    .row-highlight td {
+      background: rgba(79, 142, 247, 0.07);
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .row-total td {
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .row-top-border td {
+      border-top: 1px solid var(--border-strong);
+    }
+    .col-base {
+      color: var(--text-muted);
+    }
+    .col-terminal {
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+
+    /* Historical column styling — muted to differentiate from projections */
+    .col-historical {
+      color: var(--text-muted) !important;
+    }
+    .table-header.col-historical {
+      color: var(--text-muted);
+    }
+    /* Vertical divider between historical and projection sections */
+    .col-divider {
+      border-left: 2px solid var(--accent-primary) !important;
+    }
+    /* Historical/Projected badge labels in header */
+    .period-badge {
+      display: inline-block;
+      font-size: 0.5625rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 1px 4px;
+      border-radius: 2px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .period-badge.badge-historical {
+      background: rgba(90, 98, 120, 0.3);
+      color: var(--text-muted);
+    }
+    .period-badge.badge-projected {
+      background: rgba(79, 142, 247, 0.15);
+      color: var(--accent-primary);
+    }
+
+    /* ---- Task 09: Charts ---- */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 10px;
+    }
+
+    .chart-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 8px;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 200px;
+    }
+
+    @media (max-width: 640px) {
+      .charts-grid { grid-template-columns: 1fr; }
+      .chart-wrapper { height: 160px; }
+    }
+
+    /* ---- Task 10A: Sensitivity Tables ---- */
+    .sens-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 900px) {
+      .sens-grid { grid-template-columns: 1fr; }
+    }
+
+    .sens-table-wrap {
+      position: relative;
+      overflow-x: auto;
+    }
+
+    .sens-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.6875rem;
+    }
+
+    .sens-corner {
+      background: var(--bg-secondary);
+      color: var(--text-muted);
+      font-size: 0.625rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 3px 6px;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .sens-header {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-align: center;
+      padding: 3px 6px;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    .sens-base-col {
+      color: var(--accent-primary);
+      border-bottom: 2px solid var(--accent-primary);
+    }
+
+    .sens-row-header {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 0.6875rem;
+      font-weight: 600;
+      padding: 3px 6px;
+      white-space: nowrap;
+      border-right: 1px solid var(--border-subtle);
+    }
+
+    .sens-base-row {
+      color: var(--accent-primary);
+      border-right: 2px solid var(--accent-primary);
+    }
+
+    .sens-cell {
+      text-align: center;
+      padding: 3px 6px;
+      color: #0a0b0d;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      border: 1px solid rgba(0,0,0,0.06);
+      white-space: nowrap;
+    }
+
+    .sens-base-cell {
+      outline: 2px solid var(--accent-primary);
+      outline-offset: -2px;
+      font-weight: 700;
+      color: #0a0b0d;
+      z-index: 1;
+      position: relative;
+    }
+
+    /* Legend */
+    .sens-legend {
+      margin-top: var(--space-5);
+    }
+
+    .sens-legend-bar {
+      height: 10px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(to right,
+        rgba(220,60,60,0.75),
+        rgba(255,255,255,0.75),
+        rgba(40,167,69,0.75)
+      );
+      margin-bottom: var(--space-2);
+    }
+
+    .sens-legend-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+    }
+
+    /* ---- Sensitivity + Scenario side-by-side wrapper ---- */
+    .sensitivity-scenario-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    @media (max-width: 1100px) {
+      .sensitivity-scenario-row { grid-template-columns: 1fr; }
+    }
+
+    /* ---- Task 10B: Scenario Builder ---- */
+    .scenario-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .scenario-layout { grid-template-columns: 1fr; }
+    }
+
+    .sliders-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .slider-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .slider-value {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent-primary);
+      min-width: 40px;
+      text-align: right;
+    }
+
+    .scenario-delta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+    }
+
+    .scenario-delta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .scenario-delta-item .caption {
+      font-size: 0.5625rem;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .scenario-delta-item .metric-number {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* ---- Task 12: Raw Source Data Tabs ---- */
+    .raw-data-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border-subtle);
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .raw-data-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 14px;
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color var(--transition-fast),
+                  border-color var(--transition-fast),
+                  background var(--transition-fast);
+    }
+
+    .raw-data-tab:hover {
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+    }
+
+    .raw-data-tab.active {
+      color: var(--accent-primary);
+      border-bottom-color: var(--accent-primary);
+      font-weight: 600;
+    }
+
+    .raw-data-tab .tab-badge {
+      font-size: 0.5625rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 1px 4px;
+      border-radius: 2px;
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+
+    .raw-data-tab.active .tab-badge {
+      background: rgba(79, 142, 247, 0.15);
+      color: var(--accent-primary);
+    }
+
+    .raw-data-panel {
+      display: none;
+    }
+
+    .raw-data-panel.active {
+      display: block;
+    }
+
+    .raw-data-panel .table-container {
+      max-height: 520px;
+      overflow-y: auto;
+    }
+
+    .raw-data-panel .table-container table {
+      font-size: 0.6875rem;
+    }
+
+    .raw-data-panel .table-container thead {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    /* Row highlight for matched metrics */
+    .raw-row-matched td {
+      background: rgba(79, 142, 247, 0.05);
+    }
+    .raw-row-matched td:first-child {
+      border-left: 2px solid var(--accent-primary);
+    }
+    .raw-match-tag {
+      display: inline-block;
+      font-size: 0.5625rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: var(--accent-primary);
+      background: rgba(79, 142, 247, 0.12);
+      padding: 0px 4px;
+      border-radius: 2px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* ---- Task 13: DCF Diagnostics ---- */
+    .diag-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: var(--space-4);
+    }
+
+    .diag-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .diag-select {
+      font-family: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+
+    .diag-checkbox-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .diag-checkbox-label input[type="checkbox"] {
+      accent-color: var(--accent-primary);
+    }
+
+    /* Scenario headline bar */
+    .diag-scenario-headline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      margin-bottom: var(--space-4);
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--text-muted);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    }
+
+    .diag-headline-text {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .diag-headline-year {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    /* Terminal / ROIC notes */
+    .diag-term-warn {
+      font-size: 0.75rem;
+      color: var(--accent-warning);
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      border-radius: var(--radius-md);
+      padding: 6px 10px;
+      margin-bottom: var(--space-3);
+    }
+
+    .diag-roic-note {
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 4px 0;
+      margin-bottom: var(--space-3);
+    }
+
+    /* Summary cards row */
+    .diag-cards-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: var(--space-5);
+    }
+
+    .diag-card {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 10px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .diag-card-label {
+      font-size: 0.625rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .diag-card-value {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.9375rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+
+    /* Color classes */
+    .diag-good { color: var(--accent-success); }
+    .diag-bad  { color: var(--accent-danger); }
+    .diag-mid  { color: var(--accent-warning); }
+    .diag-na   {
+      color: var(--text-muted);
+      font-style: italic;
+      font-size: 0.75em;
+      cursor: help;
+    }
+
+    /* Sub-headings */
+    .diag-sub-heading {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: var(--space-3);
+      padding-bottom: var(--space-2);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    /* Issues section */
+    .diag-issues-section {
+      margin-bottom: var(--space-5);
+    }
+
+    .diag-issue {
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .diag-issue-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .diag-issue-badge {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .diag-issue-driver {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .diag-issue-list {
+      margin: 4px 0 0 16px;
+      padding: 0;
+      list-style: disc;
+    }
+
+    .diag-issue-list li {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      padding: 1px 0;
+    }
+
+    /* Decision questions */
+    .diag-questions-section {
+      margin-bottom: var(--space-5);
+    }
+
+    .diag-q-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .diag-q-row:last-child {
+      border-bottom: none;
+    }
+
+    .diag-q-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .diag-q-theme {
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+    }
+
+    .diag-q-text {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .diag-q-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      flex-shrink: 0;
+      min-width: 100px;
+    }
+
+    .diag-q-value {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .diag-q-why {
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+      text-align: right;
+      max-width: 280px;
+    }
+
+    /* Multi-year table: selected column highlight */
+    .diag-sel-col {
+      background: rgba(79, 142, 247, 0.06);
+    }
+
+    th.diag-sel-col {
+      border-bottom: 2px solid var(--accent-primary);
+    }
+
+    /* Table section */
+    .diag-table-section .table-container {
+      max-height: 480px;
+      overflow-y: auto;
+    }
+
+    .diag-table-section .table-container thead {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    /* Glossary expander */
+    .diag-glossary {
+      margin-bottom: var(--space-4);
+      padding: 10px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .diag-gloss-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 16px;
+    }
+
+    @media (max-width: 640px) {
+      .diag-gloss-grid { grid-template-columns: 1fr; }
+      .diag-q-row { flex-direction: column; gap: 4px; }
+      .diag-q-right { align-items: flex-start; }
+      .diag-q-why { text-align: left; max-width: none; }
+    }
+
+    .diag-gloss-grid > div {
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .diag-gloss-grid strong {
+      color: var(--text-primary);
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    /* ---- Task 14–16: Context Panel + Market Context Accordion ---- */
+
+    /* Market Context Accordion (inside assumptions panel) */
+    .ctx-accordion {
+      margin-top: 8px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .ctx-accordion-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: var(--bg-secondary);
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+
+    .ctx-accordion-summary::-webkit-details-marker { display: none; }
+
+    .ctx-accordion-summary::before {
+      content: '\25B6';
+      font-size: 0.5rem;
+      color: var(--text-muted);
+      margin-right: 6px;
+      transition: transform var(--transition-fast);
+    }
+
+    .ctx-accordion[open] .ctx-accordion-summary::before {
+      transform: rotate(90deg);
+    }
+
+    .ctx-accordion-label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary);
+      flex: 1;
+    }
+
+    .ctx-accordion-badge {
+      font-size: 0.5625rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+    }
+
+    .ctx-accordion-body {
+      padding: 8px 10px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-tertiary);
+    }
+
+    .ctx-accordion-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .ctx-accordion-fields .assumption-field select {
+      font-family: inherit;
+      color: var(--text-primary);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-strong);
+    }
+
+    /* Context Panel (right-side) */
+    .ctx-panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ctx-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-tertiary);
+    }
+
+    .ctx-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+
+    .ctx-badges {
+      display: flex;
+      gap: 4px;
+    }
+
+    .ctx-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 18px;
+      font-size: 0.625rem;
+      font-weight: 700;
+      border-radius: var(--radius-sm);
+      padding: 0 4px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ctx-badge-red {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--accent-danger);
+    }
+
+    .ctx-badge-yellow {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--accent-warning);
+    }
+
+    .ctx-badge-green {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--accent-success);
+    }
+
+    .ctx-chips {
+      display: flex;
+      gap: 4px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .ctx-chip {
+      font-size: 0.5625rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+      background: rgba(79, 142, 247, 0.1);
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+
+    .ctx-cards-list {
+      padding: 8px 10px;
+      overflow-y: auto;
+      max-height: 600px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .ctx-empty {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .ctx-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--text-muted);
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
+      transition: border-color var(--transition-fast);
+    }
+
+    .ctx-card-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .ctx-card-status {
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .ctx-card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .ctx-card-metrics {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', monospace;
+      font-size: 0.625rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .ctx-card-why {
+      font-size: 0.6875rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      margin-bottom: 4px;
+    }
+
+    .ctx-card-nextstep {
+      font-size: 0.625rem;
+      font-weight: 500;
+      color: var(--accent-primary);
+      padding-top: 4px;
+      border-top: 1px solid var(--border-subtle);
+      line-height: 1.3;
+    }
+
+    .ctx-diagnostics {
+      display: none;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .ctx-diag-header {
+      font-size: 0.5625rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .ctx-diag-line {
+      font-size: 0.6875rem;
+      color: var(--accent-danger);
+      padding: 2px 0;
+      line-height: 1.4;
+    }
+
+    /* Context panel layout: place it beside diagnostics section */
+    .context-diagnostics-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 10px;
+      align-items: start;
+    }
+
+    @media (max-width: 1100px) {
+      .context-diagnostics-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background system: gradient layer + noise overlay -->
+  <div class="bg-layer" aria-hidden="true"></div>
+  <div class="bg-noise" aria-hidden="true"></div>
+
+  <!-- ============================================================
+       [0] UPLOAD SCREEN
+  ============================================================ -->
+  <div id="upload-screen">
+    <div class="upload-card">
+      <div class="upload-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+
+      <h1 class="h2" style="margin-bottom: var(--space-2);">DCF Valuation Dashboard</h1>
+      <p class="body" style="margin-bottom: var(--space-5);">
+        Upload your financial model to generate an interactive discounted cash flow analysis.
+      </p>
+
+      <label class="upload-dropzone" id="dropzone" for="file-input">
+        <p class="h3" style="margin-bottom: var(--space-2);">Drop file here</p>
+        <p class="body">or click to browse</p>
+        <div class="upload-formats">
+          <span class="format-badge">xlsx</span>
+          <span class="format-badge">xls</span>
+          <span class="format-badge">csv</span>
+        </div>
+        <input type="file" id="file-input" accept=".xlsx,.xls,.csv" />
+      </label>
+
+      <p class="caption" style="color: var(--text-muted);">Files are processed locally — nothing is uploaded to a server.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       DASHBOARD BODY (hidden until file loaded)
+  ============================================================ -->
+  <div id="dashboard-body">
+
+    <!-- [1] HEADER / EXECUTIVE METRICS -->
+    <header id="section-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <span class="company-name" id="company-name">—</span>
+          <span class="company-meta" id="company-meta">Upload a file to begin</span>
+        </div>
+
+        <div class="metric-strip" id="metric-strip">
+          <div class="metric-strip-item">
+            <span class="metric-label">Enterprise Value</span>
+            <span class="metric-value text-terminal" id="hdr-ev">—</span>
+          </div>
+          <div class="metric-strip-item">
+            <span class="metric-label">Equity Value / Share</span>
+            <span class="metric-value" id="hdr-equity">—</span>
+          </div>
+          <div class="metric-strip-item">
+            <span class="metric-label">IRR</span>
+            <span class="metric-value" id="hdr-irr">—</span>
+          </div>
+          <div class="metric-strip-item">
+            <span class="metric-label">WACC</span>
+            <span class="metric-value" id="hdr-wacc">—</span>
+          </div>
+          <div class="metric-strip-item">
+            <span class="metric-label">Upside / Downside</span>
+            <span class="metric-value" id="hdr-upside">—</span>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button class="btn-ghost" id="btn-new-file">New File</button>
+          <button class="btn-primary" id="btn-recalculate">Recalculate</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="dashboard-main">
+
+      <!-- [9] WARNINGS -->
+      <div id="section-warnings"></div>
+
+      <!-- [1] EXECUTIVE SUMMARY — Task 06 -->
+      <section id="section-executive"></section>
+
+      <!-- [2] ASSUMPTIONS PANEL — placeholder -->
+      <section id="section-assumptions" class="section-placeholder">
+        [2] Assumptions Panel — Task 07
+      </section>
+
+      <!-- [14–16] CONTEXT PANEL (below assumptions) -->
+      <section id="section-context"></section>
+
+      <!-- [3] DCF PROJECTION TABLE — placeholder -->
+      <section id="section-dcf-table" class="section-placeholder">
+        [3] DCF Projection Table — Task 08
+      </section>
+
+      <!-- [4] CORE CHARTS — placeholder -->
+      <section id="section-charts" class="section-placeholder">
+        [4] Core Charts — Task 09
+      </section>
+
+      <!-- [5] + [6] SENSITIVITY + SCENARIO side by side -->
+      <div class="sensitivity-scenario-row">
+        <section id="section-sensitivity" class="section-placeholder">
+          [5] Sensitivity Tables — Task 10A
+        </section>
+        <section id="section-scenario" class="section-placeholder">
+          [6] Scenario Builder + Tornado Chart — Task 10B
+        </section>
+      </div>
+
+      <!-- [13] DCF DIAGNOSTICS -->
+      <section id="section-diagnostics"></section>
+
+      <!-- [8] HISTORICAL METRICS — placeholder -->
+      <section id="section-historical" class="section-placeholder">
+        [8] Historical Metrics — Tasks 03 &amp; 04
+      </section>
+
+      <!-- [12] SOURCE DATA TABS -->
+      <section id="section-raw-data"></section>
+
+      <!-- [7] TOOLTIPS / GLOSSARY — placeholder -->
+      <section id="section-tooltips" class="section-placeholder">
+        [7] Tooltips &amp; Glossary — Tasks 11A &amp; 11B
+      </section>
+
+      <!-- [11] DEBUG — placeholder (dev only) -->
+      <section id="section-debug" class="section-placeholder" style="display:none;">
+        [11] Debug / Raw Data
+      </section>
+
+    </main>
+
+    <!-- [10] FOOTER -->
+    <footer id="section-footer">
+      <p class="caption">DCF Valuation Dashboard — processed locally in your browser</p>
+    </footer>
+
+  </div><!-- /#dashboard-body -->
+
+  <!-- ============================================================
+       SCRIPTS — load order matters
+  ============================================================ -->
+  <!-- Task 00A: chart color + token constants -->
+  <script src="js/constants.js"></script>
+
+  <!-- Task 01: global state + upload screen logic -->
+  <script src="js/01_skeleton.js"></script>
+
+  <!-- Task 02: SheetJS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Task 02: Excel ingestion -->
+  <script src="js/02_ingestion.js"></script>
+
+  <!-- Task 03: Number parsing + fuzzy matching -->
+  <script src="js/03_normalization.js"></script>
+
+  <!-- Task 04: Derived historical metrics -->
+  <script src="js/04_derived_metrics.js"></script>
+
+  <!-- Task 05: DCF engine -->
+  <script src="js/05_dcf_engine.js"></script>
+
+  <!-- Task 06: Executive summary metrics -->
+  <script src="js/06_executive_summary.js"></script>
+
+  <!-- Task 07: Assumptions panel -->
+  <script src="js/07_assumptions_panel.js"></script>
+
+  <!-- Task 08: DCF projection table -->
+  <script src="js/08_dcf_table.js"></script>
+
+  <!-- Task 09: Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- Task 09: Core charts -->
+  <script src="js/09_charts.js"></script>
+
+  <!-- Task 10A: Sensitivity tables -->
+  <!--<script src="js/10a_sensitivity.js"></script>-->
+
+
+  <!-- Task 10B: Scenario sliders + tornado chart -->
+  <!--script src="js/10b_scenario.js"></script>-->
+
+  <!-- Task 11A: Tooltip engine -->
+  <!--script src="js/11a_tooltips.js"></script>-->
+
+  <!-- Task 11B: Searchable glossary panel -->
+  <!--script src="js/11b_glossary.js"></script>-->
+
+  <!-- Task 12: Raw source data tabs -->
+  <script src="js/12_raw_data_tabs.js"></script>
+
+  <!-- Task 13: DCF Diagnostics -->
+  <script src="js/13_dcf_diagnostics.js"></script>
+
+  <!-- Task 14: Context Benchmarks (data layer) -->
+  <script src="js/14_context_benchmarks.js"></script>
+
+  <!-- Task 15: Context Engine (analytics layer) -->
+  <script src="js/15_context_engine.js"></script>
+
+  <!-- Task 16: Context Panel (UI layer) -->
+  <script src="js/16_context_panel.js"></script>
+
+  <script>
+    /* ============================================================
+       TASK 01 — Inline wiring: dropzone / file-input interactions
+       (kept here because it touches the DOM defined above)
+    ============================================================ */
+
+    const dropzone   = document.getElementById('dropzone');
+    const fileInput  = document.getElementById('file-input');
+    const btnNewFile = document.getElementById('btn-new-file');
+
+    // Drag-over visual feedback
+    dropzone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropzone.classList.add('drag-over');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('drag-over');
+    });
+
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFileSelected(file);
+    });
+
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (file) handleFileSelected(file);
+    });
+
+    // "New File" resets state and returns to upload screen
+    btnNewFile.addEventListener('click', () => {
+      state.rawData    = null;
+      state.historical = null;
+      state.inputs     = {};
+      state.dcf        = null;
+      state.warnings   = [];
+      state.context    = null;
+      fileInput.value  = '';
+      showUploadScreen();
+    });
+
+    // Recalculate button — delegates to panel's recalculate() which collects inputs first
+    document.getElementById('btn-recalculate').addEventListener('click', () => {
+      if (!state.historical) return;
+      if (typeof recalculate === 'function') recalculate();
+    });
+
+    // Task 02: delegate to ingestFile() in 02_ingestion.js
+    function handleFileSelected(file) {
+      console.log('[DCF] File selected:', file.name, file.size, 'bytes');
+      ingestFile(file);
+    }
+  </script>
+
+</body>
+</html>

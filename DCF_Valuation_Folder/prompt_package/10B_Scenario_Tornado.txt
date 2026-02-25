@@ -1,0 +1,21 @@
+TASK 10B — Scenario Sliders + Tornado Chart
+
+Continue working in dcf_dashboard.html.
+
+SCOPE: - Implement interactive slider-based Scenario Builder. -
+Implement tornado chart ranking sensitivity impact. - Do NOT modify
+sensitivity tables from 10A.
+
+REQUIREMENTS: 1) Add 7 sliders (WACC, Growth, Margin, Tax, CapEx,
+Terminal Growth, Exit Multiple). 2) On slider change: - Update
+state.inputs - Recalculate DCF (throttled) 3) Build tornado chart: -
+Vary each key input by a small delta - Measure change in implied share
+price - Rank impacts largest → smallest 4) Display live delta vs base
+case in output panel.
+
+PERFORMANCE RULES: - Throttle recalculation to prevent excessive
+execution. - Destroy and recreate charts safely. - No full file
+refactors.
+
+DEFINITION OF DONE: - Sliders update valuation smoothly. - Tornado chart
+reflects relative input sensitivity.

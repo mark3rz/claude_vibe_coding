@@ -1,0 +1,141 @@
+TASK 00A — DESIGN SYSTEM FOUNDATION (Run BEFORE App Skeleton)
+
+You are modifying dcf_dashboard.html.
+
+This task establishes a STRICT fintech-grade design system. You must NOT
+implement parsing or DCF logic here. You must ONLY implement the design
+architecture and reusable component system.
+
+CRITICAL RULES: 1. No inline styles anywhere in the file. 2. All colors
+must use CSS variables (design tokens). 3. All spacing must use a
+defined spacing scale. 4. All radii must use defined radius variables.
+5. All shadows must use predefined elevation levels. 6. Charts must use
+centralized color constants. 7. Do NOT hardcode hex values outside
+:root. 8. The entire system must feel premium, modern fintech (Bloomberg
+x Stripe x Linear).
+
+  --------------------------------------
+  SECTION 1 — DESIGN TOKENS (Required)
+  --------------------------------------
+
+Define in :root:
+
+COLOR SYSTEM –bg-primary –bg-secondary –bg-tertiary –bg-elevated
+–border-subtle –border-strong
+
+–accent-primary –accent-secondary –accent-success –accent-danger
+–accent-warning –accent-terminal
+
+–text-primary –text-secondary –text-muted –text-inverted
+
+SPACING SCALE (8px base system) –space-1: 4px –space-2: 8px –space-3:
+12px –space-4: 16px –space-5: 24px –space-6: 32px –space-7: 48px
+–space-8: 64px
+
+RADIUS SCALE –radius-sm: 8px –radius-md: 12px –radius-lg: 16px
+–radius-xl: 24px
+
+ELEVATION SYSTEM –shadow-sm –shadow-md –shadow-lg –shadow-glow
+
+MOTION SYSTEM –transition-fast: 150ms ease –transition-normal: 220ms
+cubic-bezier(0.4, 0, 0.2, 1) –transition-slow: 320ms cubic-bezier(0.4,
+0, 0.2, 1)
+
+  -------------------------------
+  SECTION 2 — TYPOGRAPHY SYSTEM
+  -------------------------------
+
+Use Inter for UI text. Use monospace for financial numbers.
+
+Define: .h1 .h2 .h3 .body .caption .metric-number
+
+Requirements: - Clear hierarchy. - Strong contrast. - Slight
+letter-spacing for headings. - Financial numbers must always use
+monospace. - No random font sizes.
+
+  ------------------------------------
+  SECTION 3 — CORE COMPONENT CLASSES
+  ------------------------------------
+
+You MUST create reusable component classes:
+
+.layout-container .section .section-divider
+
+.card .card-elevated .metric-card
+
+.btn-primary .btn-secondary .btn-ghost
+
+.input-control .input-label
+
+.table-container .table-row .table-header
+
+.tooltip-container .modal-overlay
+
+Rules: - All padding uses spacing variables. - All radii use radius
+tokens. - All hover states use transition variables. - All cards use
+elevation tokens. - No unique one-off component styling allowed.
+
+  -----------------------------
+  SECTION 4 — DEPTH HIERARCHY
+  -----------------------------
+
+Establish clear surface layers:
+
+Layer 0: Background (bg-primary) Layer 1: Base surfaces (bg-secondary)
+Layer 2: Cards (bg-tertiary) Layer 3: Elevated / modals (bg-elevated
+with blur)
+
+Use subtle glow only for accent-primary and accent-terminal. Glow must
+be low opacity and professional.
+
+  -----------------------------------------
+  SECTION 5 — CHART COLOR STANDARDIZATION
+  -----------------------------------------
+
+Create centralized JS color constants:
+
+const CHART_COLORS = { primary, success, danger, warning, terminal,
+neutral };
+
+All charts must reference these constants. No inline chart colors
+allowed.
+
+  --------------------------------
+  SECTION 6 — INTERACTION POLISH
+  --------------------------------
+
+Define consistent hover states: - Slight brightness shift - Subtle
+translateY(-1px) for buttons - Soft shadow intensification - No
+aggressive animations
+
+Inputs: - Accent underline on focus - Subtle glow on focus - No default
+browser outlines (replace with accessible focus style)
+
+  ------------------------------------
+  SECTION 7 — RESPONSIVE GRID SYSTEM
+  ------------------------------------
+
+Implement: - CSS grid layout system - Consistent column gaps using
+spacing tokens - Max-width container centered - Responsive breakpoints -
+Charts must resize cleanly
+
+  --------------------------------
+  SECTION 8 — VISUAL CONSTRAINTS
+  --------------------------------
+
+-   No element may define margin or padding outside spacing tokens.
+-   No hex codes outside design tokens.
+-   No random shadows.
+-   No mixed border radii.
+-   No inconsistent text sizing.
+-   Maintain whitespace discipline.
+
+  --------------------
+  DEFINITION OF DONE
+  --------------------
+
+-   The file contains a complete reusable design system.
+-   No financial logic implemented.
+-   No inline styling exists.
+-   All future sections can reuse these components.
+-   The foundation feels premium fintech, not generic dark theme.

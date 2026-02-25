@@ -1,0 +1,16 @@
+SONNET 4.6 CLAUDE CODE GUARDRAILS — READ FIRST
+
+You are working inside an EXISTING single HTML file named
+dcf_dashboard.html.
+
+STRICT RULES: 1. Never rewrite the entire file. 2. Only modify sections
+explicitly mentioned. 3. Do not refactor previously working logic unless
+explicitly instructed. 4. Preserve all function names and signatures. 5.
+If adding new logic, append it in clearly commented sections. 6. If
+unsure, add TODO comments instead of rewriting architecture. 7. The app
+must remain a SINGLE HTML FILE. 8. Do not introduce frameworks or
+external build tools. 9. Keep changes incremental and localized. 10.
+Output the FULL updated HTML file when finished.
+
+If any instruction conflicts with existing working logic, prioritize
+preserving working logic.

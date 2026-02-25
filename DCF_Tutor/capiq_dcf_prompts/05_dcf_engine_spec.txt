@@ -1,0 +1,86 @@
+Implement an Unlevered FCFF DCF engine.
+
+Key assumptions:
+- Historical base year data comes from standardized statements built from ACTUALS ONLY by default.
+- Forecast starts from the LAST ACTUAL year by default.
+- If the user toggles “include estimates as history”, forecast starts from the last included year.
+
+Units:
+- Assume USD millions for statements and valuation outputs.
+- Price per share output is USD/share.
+
+Inputs:
+- Historical financials from standardized statements (Revenue, EBITDA, D&A, Capex, Change in NWC, Tax rate proxy if present).
+- User assumptions, year-by-year, per scenario (Base, Upside, Downside).
+- Forecast horizon selectable: 5 or 10 years.
+- Terminal value methods: perpetuity growth and exit multiple (support both, default perpetuity growth).
+
+Driver-based forecast (v1):
+For each forecast year t:
+- Revenue_t = Revenue_{t-1} * (1 + Revenue Growth_t)
+- EBITDA_t = Revenue_t * EBITDA Margin_t
+- D&A_t = Revenue_t * D&A % of Revenue_t
+- EBIT_t = EBITDA_t - D&A_t
+- Taxes_t = max(0, EBIT_t) * Tax Rate_t
+- NOPAT_t = EBIT_t - Taxes_t
+- Capex_t = Revenue_t * Capex % of Revenue_t
+- ChangeNWC_t = Revenue_t * NWC % of Revenue_t  (simple, v1)
+- FCFF_t = NOPAT_t + D&A_t - Capex_t - ChangeNWC_t
+
+Discounting:
+- WACC can be input directly OR computed.
+
+Computed WACC inputs (must show formulas and an explanation section):
+- Risk-free rate
+- Equity risk premium
+- Beta
+- Size premium (default 0)
+- Country risk premium (default 0)
+- Cost of equity = Rf + Beta*ERP + size + country
+- Pre-tax cost of debt
+- Tax rate
+- Target weights (We, Wd) OR target D/E
+- WACC = We*Re + Wd*Rd*(1 - TaxRate)
+
+Terminal value:
+- Perpetuity growth: TV = FCFF_{n+1} / (WACC - g)
+  - FCFF_{n+1} = FCFF_n * (1 + g)
+- Exit multiple: TV = EBITDA_n * ExitMultiple (EV/EBITDA)
+  - Prefill ExitMultiple from Multiples tab EV/EBITDA if present; fallback 10.0
+  - Show note "Suggested from Multiples tab: EV/EBITDA = X" when used
+
+Enterprise value:
+- EV = PV(FCFF forecast years) + PV(Terminal Value)
+
+Bridge to Equity:
+- Equity Value = Enterprise Value - Net Debt - Preferred Equity - Minority Interest + Other Adjustments
+- For MVP:
+  - Net Debt: use standardized BS Net Debt if present, else user input
+  - Preferred Equity, Minority Interest, Other Adjustments: default 0 (advanced section, cannot be blank)
+- Implied Price per Share = Equity Value / Diluted Shares (basic diluted shares only)
+
+Outputs required:
+- Enterprise Value
+- Equity Value
+- Price per Share
+- PV breakdown by year
+- Explicit vs Terminal contribution %
+
+Scenarios:
+- Base, Upside, Downside
+- Allow “copy base to upside/downside” button
+- Assumptions are year-by-year editable with a "set all years same" convenience option
+
+Advanced section must not be blank:
+- Include these fields with defaults and wire them if feasible:
+  - Working capital method (simple % revenue only in v1, but show a disabled option for component-based)
+  - Exit multiple terminal toggle
+  - Bridge adjustments: preferred equity, minority interest, other
+  - Optional: EBIT margin mode (default EBITDA margin)
+
+Testing:
+- Unit tests for:
+  - PV math
+  - terminal value (both methods)
+  - bridge math
+  - scenario separation

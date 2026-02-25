@@ -1,0 +1,13 @@
+TASK 1 — App Skeleton (Structure Only)
+
+Modify or create dcf_dashboard.html.
+
+SCOPE: - Build layout and dark theme. - No parsing. - No calculations. -
+No charts.
+
+Include: - Upload screen - Header - Section placeholders [0] through
+[11] - Global state object: const state = { rawData: null, historical:
+null, inputs: {}, dcf: null, warnings: [] };
+
+DEFINITION OF DONE: - File opens standalone. - Upload screen visible. -
+No console errors.

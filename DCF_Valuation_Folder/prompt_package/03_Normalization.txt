@@ -1,0 +1,9 @@
+TASK 3 — Number Parsing + Fuzzy Matching
+
+Add: - parseNumber() handling commas and parentheses. - Fuzzy matching
+of line items. - Populate state.historical.metrics. - Preserve year
+alignment.
+
+Do NOT: - Compute derived metrics - Implement DCF - Modify layout
+
+DEFINITION OF DONE: - Core financial series populate when available.
